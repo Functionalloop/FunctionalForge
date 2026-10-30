@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import PagemarkView from "./PagemarkView.jsx";
 
 // In dev (npm run dev) talk to the API on :8000. When built, FastAPI serves this app, so same origin.
 const API = import.meta.env.DEV ? "http://localhost:8000" : "";
 
 export default function App() {
+  const [viewMode, setViewMode] = useState("bhasha"); // "bhasha" | "pagemark"
   const [health, setHealth] = useState(null);
   const [packs, setPacks] = useState([]);
   const [packId, setPackId] = useState("tk-d");
@@ -109,16 +111,42 @@ export default function App() {
           {health === null ? "Server not reachable" : online ? "Offline mode · local CPU (Qwen2.5-3B + E5)" : "Ollama model not ready"}
         </div>
         <div className="bar-tools">
-          <select value={packId} onChange={(e) => setPackId(e.target.value)} aria-label="Content pack">
-            {packs.map((p) => (<option key={p.id} value={p.id}>{p.title}</option>))}
-          </select>
-          <label className="btn">
-            Upload textbook PDF
-            <input type="file" accept="application/pdf" onChange={onUpload} hidden />
-          </label>
+          <div className="view-tabs">
+            <button
+              type="button"
+              className={`tab-btn ${viewMode === "bhasha" ? "active" : ""}`}
+              onClick={() => setViewMode("bhasha")}
+            >
+              Bhasha Mentor
+            </button>
+            <button
+              type="button"
+              className={`tab-btn ${viewMode === "pagemark" ? "active" : ""}`}
+              onClick={() => setViewMode("pagemark")}
+            >
+              Pagemark Tool
+            </button>
+          </div>
+          {viewMode === "bhasha" && (
+            <>
+              <select value={packId} onChange={(e) => setPackId(e.target.value)} aria-label="Content pack">
+                {packs.map((p) => (<option key={p.id} value={p.id}>{p.title}</option>))}
+              </select>
+              <label className="btn">
+                Upload textbook PDF
+                <input type="file" accept="application/pdf" onChange={onUpload} hidden />
+              </label>
+            </>
+          )}
         </div>
       </header>
-      {upload && <div className="notice">{upload}</div>}
+      {viewMode === "pagemark" ? (
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <PagemarkView />
+        </div>
+      ) : (
+        <>
+          {upload && <div className="notice">{upload}</div>}
 
       <main className="split">
         <section className="chat" aria-label="Questions and answers">
@@ -187,6 +215,8 @@ export default function App() {
           )}
         </aside>
       </main>
+        </>
+      )}
     </div>
   );
 }

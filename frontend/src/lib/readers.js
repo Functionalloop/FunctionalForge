@@ -11,7 +11,7 @@ export function splitText(t) {
 }
 
 export async function readPdf(file, onStatus) {
-  const pdfjs = await import('pdfjs-dist')
+  const pdfjs = await import('pdfjs-dist/build/pdf.mjs')
   const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
   pdfjs.GlobalWorkerOptions.workerSrc = worker
   const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
