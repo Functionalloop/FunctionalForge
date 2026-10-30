@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+models/
+node_modules/
+frontend/dist/
+content-packs/*/.cache/
+.DS_Store

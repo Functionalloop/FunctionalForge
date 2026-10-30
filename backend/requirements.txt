@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pymupdf
+rank-bm25
+sentence-transformers
+numpy
+pydantic
+python-multipart
+requests

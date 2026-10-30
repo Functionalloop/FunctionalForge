@@ -1,0 +1,13 @@
+{
+  "id": "tk-d",
+  "title": "TK-D test kit",
+  "description": "Official TK-D data pack (Hindi textbook chapter)",
+  "chapter": "TK-D अध्याय",
+  "sample_questions": [
+    "REPLACE: TK-D question 1 (Hindi)",
+    "REPLACE: TK-D question 2 (Hindi)",
+    "REPLACE: TK-D question 3 (Hindi)",
+    "REPLACE: TK-D question 4 (Hindi)",
+    "REPLACE: TK-D question 5 (Hindi)"
+  ]
+}
