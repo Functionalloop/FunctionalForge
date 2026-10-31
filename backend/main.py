@@ -1,8 +1,9 @@
 """Bhasha Mentor offline API.   Run:  cd backend && uvicorn main:app --port 8000"""
 import config  # noqa: F401  (must be first)
 
-import io
+import asyncio
 import json
+from pathlib import Path
 import re
 import shutil
 import time
@@ -68,6 +69,8 @@ def _index_pack(pack_id: str, force: bool = False, chapter_name: Optional[str] =
         save_index(chunks, index_file)
     else:
         raise HTTPException(404, f"No PDF or index.json in pack '{pack_id}'.")
+    if STATE.get("embedder") is None:
+        STATE["embedder"] = load_embedder()
     r = HybridRetriever(STATE["embedder"])
     r.build_index(chunks, cache_dir=d / ".cache")
     STATE["retrievers"][pack_id] = r
@@ -178,24 +181,58 @@ def page_image(pack_id: str = "tk-d", page_number: int = 1, dpi: int = 150):
         raise HTTPException(500, f"Rendering page error: {e}")
 
 
+@app.get("/api/packs/{pack_id}/page/{page_num}")
+def page_image_api(pack_id: str, page_num: int, dpi: int = 150):
+    return page_image(pack_id=pack_id, page_number=page_num, dpi=dpi)
+
+
 @app.post("/ingest")
 async def ingest(
-    pack_id: str = Form("tk-d"),
+    pack_id: Optional[str] = Form(None),
     chapter_name: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
 ):
-    d = _pack_dir(pack_id, create=True)
+    if file is None and not pack_id:
+        raise HTTPException(400, "Provide a PDF file or pack_id.")
     if file is not None:
         if not (file.filename or "").lower().endswith(".pdf"):
             raise HTTPException(400, "Upload a .pdf file.")
-        with open(d / "chapter.pdf", "wb") as f:
-            shutil.copyfileobj(file.file, f)
-    return {"status": "indexed", **_index_pack(pack_id, force=True, chapter_name=chapter_name)}
+        if not pack_id:
+            raw_stem = Path(file.filename).stem
+            clean_id = re.sub(r"[^A-Za-z0-9_-]", "_", raw_stem)[:28].strip("_").lower()
+            pack_id = clean_id or f"doc_{int(time.time())}"
+
+        d = _pack_dir(pack_id, create=True)
+        pdf_path = d / "chapter.pdf"
+        content = await file.read()
+        with open(pdf_path, "wb") as f:
+            f.write(content)
+
+        doc_title = chapter_name or Path(file.filename).stem.replace("_", " ").title()
+        info_file = d / "info.json"
+        info = {
+            "title": doc_title,
+            "chapter": doc_title,
+            "description": f"Uploaded document: {file.filename}",
+            "book_page_offset": 0,
+            "sample_questions": [
+                f"What are the main concepts discussed in {doc_title}?",
+                "Summarize the key points in this document.",
+                "Explain the first topic in detail."
+            ]
+        }
+        info_file.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+    else:
+        d = _pack_dir(pack_id, create=True)
+
+    result = await asyncio.to_thread(_index_pack, pack_id, True, chapter_name)
+    return {"status": "indexed", "pack_id": pack_id, **result}
 
 
 class AskRequest(BaseModel):
     pack_id: str = "tk-d"
     question: str
+    language: Optional[str] = "en"
 
 
 def _retrieve(req: AskRequest):
@@ -212,7 +249,7 @@ def _check_section_warning(topic: str) -> Optional[str]:
     t = (topic or "").lower()
     summary_keywords = ["सारांश", "summary", "अभ्यास", "exercise", "विचारणीय", "thought", "प्रश्न", "question"]
     if any(k in t for k in summary_keywords):
-        return "यह अंश अध्याय के सारांश, विचारणीय विषय या अभ्यास से है और हो सकता है कि संपूर्ण उत्तर का पूर्ण समर्थन न करे।"
+        return "This passage comes from the chapter summary, questions, or exercise section."
     return None
 
 
@@ -245,10 +282,12 @@ def _citations(chunks):
 def ask(req: AskRequest):
     t0 = time.time()
     q, chunks = _retrieve(req)
+    lang = req.language or "en"
     if not chunks:
-        return {"answer": "इस पाठ्यपुस्तक में यह जानकारी उपलब्ध नहीं है।", "citations": [], "latency_ms": 0}
+        not_avail = "This information is not available in the indexed document." if lang != "hi" else "इस दस्तावेज़ में यह जानकारी उपलब्ध नहीं है।"
+        return {"answer": not_avail, "citations": [], "latency_ms": 0}
     try:
-        answer = llm.generate(llm.build_prompt(q, chunks))
+        answer = llm.generate(llm.build_prompt(q, chunks, language=lang))
     except llm.OllamaUnavailable as e:
         raise HTTPException(503, str(e))
     return {"answer": answer, "citations": _citations(chunks), "latency_ms": int((time.time() - t0) * 1000)}
@@ -263,12 +302,13 @@ def ask_stream(req: AskRequest):
     """NDJSON stream: citations first (instant), then answer tokens, then done."""
     t0 = time.time()
     q, chunks = _retrieve(req)
+    lang = req.language or "en"
 
     def gen():
         yield _line({"type": "citations", "citations": _citations(chunks)})
         if chunks:
             try:
-                for tok in llm.generate_stream(llm.build_prompt(q, chunks)):
+                for tok in llm.generate_stream(llm.build_prompt(q, chunks, language=lang)):
                     yield _line({"type": "token", "text": tok})
             except llm.OllamaUnavailable as e:
                 yield _line({"type": "error", "message": str(e)})

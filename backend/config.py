@@ -12,7 +12,7 @@ PACKS_DIR = BASE_DIR / "content-packs"
 MODEL_DIR = BASE_DIR / "models" / "e5-small"
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "bhasha-hindi")
 TOP_K = int(os.getenv("TOP_K", "3"))            # chunks sent to the LLM
 NUM_PREDICT = int(os.getenv("NUM_PREDICT", "220"))  # max answer tokens (keeps CPU latency bounded)

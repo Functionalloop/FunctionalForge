@@ -1,4 +1,4 @@
-/* Pagemark Scoped Modern Brutalist Styling */
+/* Pagemark Scoped Stark Editorial Styling */
 .tool {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -11,33 +11,33 @@
 }
 
 .tool h3 {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.88rem;
+  font-family: var(--font-editorial, sans-serif);
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #8b8d9e;
+  letter-spacing: 0.12em;
+  color: #111111;
   margin-bottom: 14px;
   text-transform: uppercase;
 }
 
 .tool .drop {
-  border: 2px dashed #272832;
-  background: #121316;
+  border: 1px solid #E5E7EB;
+  background: #FAFAFA;
   padding: 36px 20px;
   text-align: center;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.85rem;
-  color: #8b8d9e;
+  font-family: var(--font-editorial, sans-serif);
+  font-size: 13px;
+  color: #6B7280;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 0;
   transition: all 0.15s ease;
 }
 
 .tool .drop:hover,
 .tool .drop.on {
-  border-color: #f0f0f4;
-  color: #f0f0f4;
-  background: #18191e;
+  border-color: #22C55E;
+  color: #111111;
+  background: #F0FDF4;
 }
 
 .tool .row {
@@ -54,19 +54,19 @@
 
 .tool select,
 .tool input {
-  background: #121316;
-  border: 1px solid #272832;
-  color: #f0f0f4;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.82rem;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  color: #111111;
+  font-family: var(--font-editorial, sans-serif);
+  font-size: 13px;
   padding: 10px 14px;
-  border-radius: 3px;
+  border-radius: 0;
   outline: none;
 }
 
 .tool select:focus,
 .tool input:focus {
-  border-color: #e5e5eb;
+  border-color: #22C55E;
 }
 
 .tool input {
@@ -74,51 +74,52 @@
 }
 
 .tool .small {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.78rem;
-  color: #8b8d9e;
+  font-family: var(--font-editorial, sans-serif);
+  font-size: 11px;
+  color: #6B7280;
   margin-top: 8px;
 }
 
 .tool .ghost {
-  background: transparent;
-  border: 1px solid #272832;
-  color: #f0f0f4;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.8rem;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  color: #111111;
+  font-family: var(--font-editorial, sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   padding: 8px 14px;
-  border-radius: 3px;
+  border-radius: 0;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .tool .ghost:hover {
-  background: #272832;
-  border-color: #e5e5eb;
+  background: #F9FAFB;
+  border-color: #9CA3AF;
 }
 
 .tool .ghost.sm {
   padding: 3px 8px;
-  font-size: 0.72rem;
+  font-size: 10px;
 }
 
 .tool .lime {
-  background: #f0f0f4;
-  border: 1px solid #f0f0f4;
-  color: #0a0a0c;
-  font-family: var(--font-mono, monospace);
+  background: #22C55E;
+  border: none;
+  color: #0A0A0A;
+  font-family: var(--font-editorial, sans-serif);
   font-weight: 700;
-  font-size: 0.82rem;
-  letter-spacing: 0.05em;
-  padding: 10px 18px;
-  border-radius: 3px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 10px 20px;
+  border-radius: 0;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .tool .lime:hover {
-  background: #f5ee38;
-  border-color: #f5ee38;
+  background: #16A34A;
 }
 
 .tool .docs {
@@ -134,11 +135,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #18191e;
-  border: 1px solid #272832;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
   padding: 10px 14px;
   font-family: var(--font-mono, monospace);
-  font-size: 0.82rem;
+  font-size: 12px;
+  color: #111111;
 }
 
 .tool .answer {
@@ -148,50 +150,49 @@
 .tool .badge {
   display: inline-block;
   font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 4px 10px;
-  border-radius: 2px;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
   text-transform: uppercase;
   margin-bottom: 8px;
 }
 
 .tool .badge.ok {
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid #10b981;
-  color: #34d399;
+  background: #DCFCE7;
+  border: 1px solid #BBF7D0;
+  color: #166534;
 }
 
 .tool .badge.weak {
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid #f59e0b;
-  color: #fbbf24;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  color: #B45309;
 }
 
 .tool .badge.no {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid #ef4444;
-  color: #f87171;
+  background: #FEE2E2;
+  border: 1px solid #FECACA;
+  color: #B91C1C;
 }
 
 .tool .page {
   font-family: var(--font-hindi, inherit);
-  font-size: 0.95rem;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.8;
   white-space: pre-wrap;
-  max-height: 340px;
+  max-height: 400px;
   overflow-y: auto;
-  background: #18191e;
-  border: 1px solid #272832;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
   padding: 18px;
-  color: #f0f0f4;
+  color: #111111;
   margin-top: 10px;
 }
 
 .tool .page mark {
-  background: #f5ee38;
-  color: #0a0a0c;
+  background: #DCFCE7;
+  color: #111111;
   padding: 2px 4px;
 }
 

@@ -64,7 +64,7 @@ class HybridRetriever:
                 self.embeddings = np.load(emb_file)
                 return
         self.embeddings = np.asarray(
-            self.embedder.encode(passages, normalize_embeddings=True, batch_size=16, show_progress_bar=False)
+            self.embedder.encode(passages, normalize_embeddings=True, batch_size=32, show_progress_bar=False)
         )
         if emb_file:
             np.save(emb_file, self.embeddings)

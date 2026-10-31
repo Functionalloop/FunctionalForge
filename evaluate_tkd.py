@@ -7,7 +7,7 @@ from pathlib import Path
 
 import requests
 
-API = "http://localhost:8000"
+API = "http://127.0.0.1:8000"
 items = json.loads((Path(__file__).parent / "tkd_questions.json").read_text(encoding="utf-8"))
 
 top1 = top3 = 0

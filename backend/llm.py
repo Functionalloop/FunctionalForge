@@ -10,15 +10,49 @@ class OllamaUnavailable(RuntimeError):
     pass
 
 
-def build_prompt(question: str, chunks) -> str:
+LANGUAGE_NAMES = {
+    "en": "English",
+    "hi": "Hindi (हिंदी)",
+    "es": "Spanish (Español)",
+    "fr": "French (Français)",
+    "de": "German (Deutsch)",
+    "bn": "Bengali (বাংলা)",
+    "mr": "Marathi (मराठी)",
+    "ta": "Tamil (தமிழ்)",
+    "te": "Telugu (తెలుగు)",
+    "gu": "Gujarati (ગુજરાતી)",
+    "kn": "Kannada (ಕನ್ನಡ)",
+    "ml": "Malayalam (മലയാളം)",
+    "pa": "Punjabi (ਪੰਜਾਬੀ)",
+    "ur": "Urdu (اردو)",
+    "ar": "Arabic (العربية)",
+    "ja": "Japanese (日本語)",
+    "zh": "Chinese (中文)",
+    "ru": "Russian (Русский)",
+}
+
+
+def build_prompt(question: str, chunks, language: str = "en") -> str:
     # Page numbers are deliberately NOT included: the model must never see or cite them.
     context = "\n\n".join(
-        f"[अंश {i + 1} | विषय: {c['topic']}]\n{c['text']}" for i, c in enumerate(chunks)
+        f"[Passage {i + 1} | Section: {c.get('topic', '')}]\n{c['text']}" for i, c in enumerate(chunks)
     )
+    lang_name = LANGUAGE_NAMES.get(language, language)
+    if language == "hi":
+        return (
+            f"संदर्भ (Context):\n{context}\n\n"
+            f"छात्र का प्रश्न: {question}\n\n"
+            f"निर्देश: केवल दिए गए संदर्भ के आधार पर उत्तर दें। उत्तर स्पष्ट रूप से हिंदी में (3-5 वाक्यों में) दें। "
+            f"यदि जानकारी संदर्भ में नहीं है, तो कहें 'इस दस्तावेज़ में यह जानकारी उपलब्ध नहीं है।'\n\n"
+            f"उत्तर:"
+        )
     return (
-        f"संदर्भ (Context):\n{context}\n\n"
-        f"छात्र का प्रश्न: {question}\n\n"
-        "उत्तर (केवल हिंदी में, 3-5 वाक्यों में):"
+        f"Context:\n{context}\n\n"
+        f"Question: {question}\n\n"
+        f"Instructions: Answer accurately based ONLY on the context provided above. "
+        f"Respond entirely in {lang_name} in 3 to 5 clear sentences. "
+        f"If the information is not found in the context, state that the information is not available in this document.\n\n"
+        f"Answer in {lang_name}:"
     )
 
 
