@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildIndex, search } from './lib/search.js'
 import { saveDoc, deleteDoc, loadDocs } from './lib/storage.js'
 import { readPdf, readImage, splitText } from './lib/readers.js'
-import './pagemark.css'
 
 const LANGS = [['eng', 'English'], ['hin', 'Hindi'], ['mar', 'Marathi'], ['tam', 'Tamil'], ['tel', 'Telugu'], ['ben', 'Bengali'], ['spa', 'Spanish'], ['fra', 'French']]
 const SAMPLE = [

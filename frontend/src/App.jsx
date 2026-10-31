@@ -127,7 +127,6 @@ export default function App() {
   // Right Column Editorial / PDF Page viewer state
   const [pageNumber, setPageNumber] = useState(1);
   const [zoomLevel, setZoomLevel] = useState(1.0);
-  const [viewMode, setViewMode] = useState("document"); // "document" | "scan"
   const [highlightSource, setHighlightSource] = useState(true);
   const [pageImageLoading, setPageImageLoading] = useState(false);
   const [pageImageError, setPageImageError] = useState(false);
@@ -1046,23 +1045,6 @@ export default function App() {
                   <span className="bento-badge-violet" title="Unicode NFC Normalized">
                     UNICODE NFC CLEANED
                   </span>
-
-                  <div className="bento-segmented-toggle">
-                    <button
-                      type="button"
-                      className={`seg-toggle-btn ${viewMode === "document" ? "active" : ""}`}
-                      onClick={() => setViewMode("document")}
-                    >
-                      {t.viewExcerpt}
-                    </button>
-                    <button
-                      type="button"
-                      className={`seg-toggle-btn ${viewMode === "scan" ? "active" : ""}`}
-                      onClick={() => setViewMode("scan")}
-                    >
-                      {t.viewScan}
-                    </button>
-                  </div>
                 </div>
 
                 <div className="toolbar-right-cluster">
@@ -1094,7 +1076,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Reader Body: Awaiting vs Scan vs Highlighted Excerpt */}
+              {/* Reader Body: Awaiting vs PDF Page Scan */}
               {!activeCitation ? (
                 <div className="bento-reader-awaiting">
                   <span className="bento-badge-violet">[TEXTBOOK READY]</span>
@@ -1107,7 +1089,7 @@ export default function App() {
                   <h3 className="awaiting-title">{t.noMatchEvidenceTitle}</h3>
                   <p className="awaiting-description">{t.noMatchEvidenceDesc}</p>
                 </div>
-              ) : viewMode === "scan" ? (
+              ) : (
                 /* PDF Scanned Pixmap View */
                 <div className="bento-scan-viewport">
                   <div className="bento-scan-controls-bar">
@@ -1141,7 +1123,7 @@ export default function App() {
                         <span className="error-tag-badge">[RENDERER OFFLINE]</span>
                         <h4 className="error-card-title">Page {pageNumber} scan could not be fetched</h4>
                         <p className="error-card-text">
-                          The backend server was unreachable on port 8000. You can inspect the fully repaired textbook text in Document view.
+                          The backend server was unreachable on port 8000. Please ensure the backend is running.
                         </p>
                         <div className="error-actions-row">
                           <button
@@ -1156,13 +1138,6 @@ export default function App() {
                           >
                             <span>RETRY FETCH</span>
                             <span>↗</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-switch-doc"
-                            onClick={() => setViewMode("document")}
-                          >
-                            SWITCH TO DOCUMENT VIEW
                           </button>
                         </div>
                       </div>
@@ -1202,7 +1177,7 @@ export default function App() {
                         />
 
                         {/* Bounding Box Highlight Overlay */}
-                        {!pageImageError && activeCitation.page_number === pageNumber && activeCitation.bbox && (
+                        {!pageImageError && highlightSource && activeCitation.page_number === pageNumber && activeCitation.bbox && (
                           <div
                             className="bento-bbox-overlay"
                             style={{
@@ -1214,72 +1189,6 @@ export default function App() {
                             }}
                           />
                         )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* The Highlighted Editorial Devanagari Excerpt View */
-                <div className="bento-excerpt-reading-sheet">
-                  <div className="sheet-top-meta-row">
-                    <span className="sheet-page-pill">
-                      PDF p.{pageNumber} {bookOffset > 0 ? `· Book p.${pageNumber + bookOffset}` : ""}
-                    </span>
-                    <span className="sheet-doc-title">
-                      {normalizeDevanagari(selectedPack?.title || activeCitation.chapter || "Document")}
-                    </span>
-                  </div>
-
-                  {/* Section Title */}
-                  <h1 className="sheet-section-title">
-                    <span className="section-num">{String(pageNumber).padStart(2, "0")}. </span>
-                    <span className="section-name">
-                      {normalizeDevanagari(activeCitation.topic || selectedPack?.title || "Overview")}
-                    </span>
-                  </h1>
-
-                  {activeCitation.section_warning && (
-                    <div className="sheet-warning-banner">
-                      [!] {activeCitation.section_warning}
-                    </div>
-                  )}
-
-                  {/* Verified Textbook Excerpt with Soft Electric Lime Marker Highlight */}
-                  <div className="bento-passage-card">
-                    <div className="passage-card-tagline">
-                      <span>TEXTBOOK PAGE EXCERPT (NORMALIZED UNICODE)</span>
-                    </div>
-
-                    <div className="passage-card-prose">
-                      {highlightSource ? (
-                        <mark className="passage-highlight">
-                          {normalizeDevanagari(activeCitation.snippet)}
-                        </mark>
-                      ) : (
-                        <span className="passage-plain">
-                          {normalizeDevanagari(activeCitation.snippet)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="sheet-footer-colophon">
-                    <span>{normalizeDevanagari(selectedPack?.title || "Document")} · Grounded Source Passage</span>
-                    <span>Page {pageNumber}</span>
-                  </div>
-
-                  {/* Collapsible Raw Text (Debug) */}
-                  <div className="sheet-raw-debug">
-                    <button
-                      type="button"
-                      className="raw-debug-toggle-btn"
-                      onClick={() => setShowRawDebug(!showRawDebug)}
-                    >
-                      {showRawDebug ? "[-] HIDE RAW TEXT (DEBUG)" : "[+] SHOW RAW TEXT (DEBUG)"}
-                    </button>
-                    {showRawDebug && (
-                      <div className="raw-debug-card">
-                        <pre className="raw-debug-text">{activeCitation.snippet}</pre>
                       </div>
                     )}
                   </div>
