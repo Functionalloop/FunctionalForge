@@ -153,9 +153,10 @@ def page_image(pack_id: str = "tk-d", page_number: int = 1, dpi: int = 150):
         raise HTTPException(404, "PDF not found.")
     try:
         doc = fitz.open(str(pdf))
-        if page_number < 1 or page_number > len(doc):
+        total_pages = len(doc)
+        if page_number < 1 or page_number > total_pages:
             doc.close()
-            raise HTTPException(400, f"Page number {page_number} out of range (1..{len(doc)}).")
+            raise HTTPException(400, f"Page number {page_number} out of range (1..{total_pages}).")
         page = doc[page_number - 1]
         rect = page.rect
         pix = page.get_pixmap(dpi=dpi)
@@ -168,9 +169,11 @@ def page_image(pack_id: str = "tk-d", page_number: int = 1, dpi: int = 150):
             headers={
                 "X-Page-Width": str(page_width),
                 "X-Page-Height": str(page_height),
-                "X-Total-Pages": str(len(doc) if 'doc' in locals() else 0),
+                "X-Total-Pages": str(total_pages),
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, f"Rendering page error: {e}")
 
