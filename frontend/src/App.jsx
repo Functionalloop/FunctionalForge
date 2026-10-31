@@ -1,221 +1,373 @@
 import { useEffect, useRef, useState } from "react";
-import PagemarkView from "./PagemarkView.jsx";
+import Tool from "./PagemarkTool.jsx";
 
-// In dev (npm run dev) talk to the API on :8000. When built, FastAPI serves this app, so same origin.
 const API = import.meta.env.DEV ? "http://localhost:8000" : "";
 
 export default function App() {
-  const [viewMode, setViewMode] = useState("bhasha"); // "bhasha" | "pagemark"
+  const [activeTab, setActiveTab] = useState("mentor"); // "mentor" | "pagemark"
   const [health, setHealth] = useState(null);
   const [packs, setPacks] = useState([]);
   const [packId, setPackId] = useState("tk-d");
   const [messages, setMessages] = useState([]);
-  const [active, setActive] = useState(-1);   // which answer the source panel shows
-  const [citeIdx, setCiteIdx] = useState(0);  // which retrieved source is in focus
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [upload, setUpload] = useState("");
-  const endRef = useRef(null);
+  const [activeMsgIdx, setActiveMsgIdx] = useState(-1);
+  const [activeCiteIdx, setActiveCiteIdx] = useState(0);
+  const [inputVal, setInputVal] = useState("");
+  const [isBusy, setIsBusy] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const logBottomRef = useRef(null);
 
-  const loadPacks = () =>
-    fetch(`${API}/packs`).then((r) => r.json()).then((p) => {
-      setPacks(p);
-      if (p.length && !p.find((x) => x.id === packId)) setPackId(p[0].id);
-    }).catch(() => {});
+  const fetchPacks = () => {
+    fetch(`${API}/packs`)
+      .then((res) => res.json())
+      .then((data) => {
+        setPacks(data);
+        if (data.length && !data.find((p) => p.id === packId)) {
+          setPackId(data[0].id);
+        }
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => {
-    const ping = () => fetch(`${API}/health`).then((r) => r.json()).then(setHealth).catch(() => setHealth(null));
-    ping();
-    loadPacks();
-    const t = setInterval(ping, 10000);
-    return () => clearInterval(t);
+    const checkHealth = () => {
+      fetch(`${API}/health`)
+        .then((res) => res.json())
+        .then(setHealth)
+        .catch(() => setHealth(null));
+    };
+    checkHealth();
+    fetchPacks();
+    const interval = setInterval(checkHealth, 10000);
+    return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => {
+    logBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  const patch = (i, fn) => setMessages((m) => m.map((x, j) => (j === i ? fn(x) : x)));
+  const updateMessage = (index, updater) => {
+    setMessages((prev) => prev.map((msg, i) => (i === index ? updater(msg) : msg)));
+  };
 
-  async function ask(q) {
-    q = q.trim();
-    if (!q || busy) return;
-    const i = messages.length;
-    setInput(""); setBusy(true); setActive(i); setCiteIdx(0);
-    setMessages((m) => [...m, { q, a: "", citations: [], loading: true, latency: null, error: null }]);
+  async function handleAsk(questionText) {
+    const q = questionText.trim();
+    if (!q || isBusy) return;
+
+    const currentMsgIndex = messages.length;
+    setInputVal("");
+    setIsBusy(true);
+    setActiveMsgIdx(currentMsgIndex);
+    setActiveCiteIdx(0);
+
+    setMessages((prev) => [
+      ...prev,
+      { question: q, answer: "", citations: [], loading: true, latency: null, error: null }
+    ]);
+
     try {
-      const res = await fetch(`${API}/ask/stream`, {
+      const response = await fetch(`${API}/ask/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pack_id: packId, question: q }),
+        body: JSON.stringify({ pack_id: packId, question: q })
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Server error ${res.status}`);
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      for (;;) {
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server error: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let nl;
-        while ((nl = buf.indexOf("\n")) >= 0) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          const ev = JSON.parse(line);
-          if (ev.type === "citations") patch(i, (x) => ({ ...x, citations: ev.citations }));
-          else if (ev.type === "token") patch(i, (x) => ({ ...x, a: x.a + ev.text }));
-          else if (ev.type === "error") patch(i, (x) => ({ ...x, error: ev.message }));
-          else if (ev.type === "done") patch(i, (x) => ({ ...x, loading: false, latency: ev.latency_ms }));
+
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
+          const rawLine = buffer.slice(0, newlineIndex).trim();
+          buffer = buffer.slice(newlineIndex + 1);
+          if (!rawLine) continue;
+
+          const event = JSON.parse(rawLine);
+          if (event.type === "citations") {
+            updateMessage(currentMsgIndex, (m) => ({ ...m, citations: event.citations }));
+          } else if (event.type === "token") {
+            updateMessage(currentMsgIndex, (m) => ({ ...m, answer: m.answer + event.text }));
+          } else if (event.type === "error") {
+            updateMessage(currentMsgIndex, (m) => ({ ...m, error: event.message }));
+          } else if (event.type === "done") {
+            updateMessage(currentMsgIndex, (m) => ({
+              ...m,
+              loading: false,
+              latency: event.latency_ms
+            }));
+          }
         }
       }
-    } catch (e) {
-      patch(i, (x) => ({ ...x, loading: false, error: String(e.message || e) }));
+    } catch (err) {
+      updateMessage(currentMsgIndex, (m) => ({
+        ...m,
+        loading: false,
+        error: String(err.message || err)
+      }));
     } finally {
-      patch(i, (x) => ({ ...x, loading: false }));
-      setBusy(false);
+      updateMessage(currentMsgIndex, (m) => ({ ...m, loading: false }));
+      setIsBusy(false);
     }
   }
 
-  async function onUpload(e) {
+  async function handleFileUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUpload("Indexing…");
-    const fd = new FormData();
-    fd.append("pack_id", packId);
-    fd.append("file", file);
+
+    setUploadStatus("Indexing document...");
+    const formData = new FormData();
+    formData.append("pack_id", packId);
+    formData.append("file", file);
+
     try {
-      const r = await fetch(`${API}/ingest`, { method: "POST", body: fd });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.detail || "Upload failed");
-      setUpload(`Indexed ${j.chunks} passages from ${j.pages_parsed} pages`);
-      loadPacks();
+      const res = await fetch(`${API}/ingest`, { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Indexing failed");
+      setUploadStatus(`Indexed ${data.chunks} passages from ${data.pages_parsed} pages.`);
+      fetchPacks();
     } catch (err) {
-      setUpload(`Upload failed: ${err.message}`);
+      setUploadStatus(`Upload failed: ${err.message}`);
     }
     e.target.value = "";
   }
 
-  const pack = packs.find((p) => p.id === packId);
-  const cur = messages[active];
-  const cite = cur?.citations?.[citeIdx];
-  const online = health && health.ollama_ready;
+  const selectedPack = packs.find((p) => p.id === packId);
+  const activeMessage = messages[activeMsgIdx];
+  const activeCitation = activeMessage?.citations?.[activeCiteIdx];
+  const isServerReady = health && health.ollama_ready;
 
   return (
-    <div className="app">
-      <header className="bar">
-        <div className="brand">
-          <span className="brand-hi">भाषा मेंटर</span>
-          <span className="brand-en">Bhasha Mentor</span>
+    <div className="layout-root">
+      {/* Top Header */}
+      <header className="header-bar">
+        <div className="brand-group">
+          <span className="brand-title">BHASHA MENTOR</span>
+          <span className="brand-divider">/</span>
+          <span className="brand-sub">STUDY ASSISTANT</span>
         </div>
-        <div className={`pill ${online ? "ok" : "warn"}`} title="All processing happens on this laptop">
-          <span className="dot" />
-          {health === null ? "Server not reachable" : online ? "Offline mode · local CPU (Qwen2.5-3B + E5)" : "Ollama model not ready"}
-        </div>
-        <div className="bar-tools">
-          <div className="view-tabs">
-            <button
-              type="button"
-              className={`tab-btn ${viewMode === "bhasha" ? "active" : ""}`}
-              onClick={() => setViewMode("bhasha")}
-            >
-              Bhasha Mentor
-            </button>
-            <button
-              type="button"
-              className={`tab-btn ${viewMode === "pagemark" ? "active" : ""}`}
-              onClick={() => setViewMode("pagemark")}
-            >
-              Pagemark Tool
-            </button>
+
+        <nav className="nav-tabs" aria-label="Mode Selection">
+          <button
+            type="button"
+            className={`nav-btn ${activeTab === "mentor" ? "active" : ""}`}
+            onClick={() => setActiveTab("mentor")}
+          >
+            TEXTBOOK QA
+          </button>
+          <button
+            type="button"
+            className={`nav-btn ${activeTab === "pagemark" ? "active" : ""}`}
+            onClick={() => setActiveTab("pagemark")}
+          >
+            PAGEMARK SEARCH
+          </button>
+        </nav>
+
+        <div className="header-meta">
+          <div className="status-indicator">
+            <span className={`status-signal ${isServerReady ? "live" : "standby"}`} />
+            <span className="status-text">
+              {health === null
+                ? "SERVER DISCONNECTED"
+                : isServerReady
+                ? "OFFLINE READY [CPU]"
+                : "MODEL STANDBY"}
+            </span>
           </div>
-          {viewMode === "bhasha" && (
-            <>
-              <select value={packId} onChange={(e) => setPackId(e.target.value)} aria-label="Content pack">
-                {packs.map((p) => (<option key={p.id} value={p.id}>{p.title}</option>))}
+
+          {activeTab === "mentor" && (
+            <div className="control-group">
+              <select
+                className="select-input"
+                value={packId}
+                onChange={(e) => setPackId(e.target.value)}
+                aria-label="Select Content Pack"
+              >
+                {packs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
               </select>
-              <label className="btn">
-                Upload textbook PDF
-                <input type="file" accept="application/pdf" onChange={onUpload} hidden />
+              <label className="action-btn upload-btn">
+                UPLOAD PDF
+                <input type="file" accept="application/pdf" onChange={handleFileUpload} hidden />
               </label>
-            </>
+            </div>
           )}
         </div>
       </header>
-      {viewMode === "pagemark" ? (
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <PagemarkView />
-        </div>
-      ) : (
-        <>
-          {upload && <div className="notice">{upload}</div>}
 
-      <main className="split">
-        <section className="chat" aria-label="Questions and answers">
-          <div className="log">
-            {messages.length === 0 && (
-              <div className="empty">
-                <p className="empty-title">पाठ्यपुस्तक से कोई भी प्रश्न पूछें</p>
-                <p>Ask in Hindi. Every answer shows the exact textbook page it came from.</p>
-              </div>
-            )}
-            {messages.map((m, i) => (
-              <article key={i} className={`turn ${i === active ? "is-active" : ""}`} onClick={() => { setActive(i); setCiteIdx(0); }}>
-                <p className="q">{m.q}</p>
-                {m.error && <p className="err">{m.error}</p>}
-                <p className="a">{m.a}{m.loading && <span className="caret" />}</p>
-                {m.latency != null && <p className="meta">{(m.latency / 1000).toFixed(1)} s · page {m.citations[0]?.page_number ?? "–"}</p>}
-              </article>
-            ))}
-            <div ref={endRef} />
-          </div>
+      {uploadStatus && <div className="system-banner">{uploadStatus}</div>}
 
-          {pack?.sample_questions?.length > 0 && (
-            <div className="samples">
-              {pack.sample_questions.map((s, i) => (
-                <button key={i} className="chip" disabled={busy} onClick={() => ask(s)}>{s}</button>
-              ))}
+      {/* Main Content Area */}
+      {activeTab === "pagemark" ? (
+        <main className="tool-container">
+          <div className="tool-inner">
+            <div className="section-header">
+              <span className="section-tag">TOOL</span>
+              <h2 className="section-title">LOCAL IN-BROWSER PAGE SEARCH</h2>
             </div>
-          )}
-          <div className="composer">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && ask(input)}
-              placeholder="अपना प्रश्न यहाँ लिखें…"
-              aria-label="Your question"
-            />
-            <button className="btn primary" disabled={busy || !input.trim()} onClick={() => ask(input)}>
-              {busy ? "Answering…" : "Ask"}
-            </button>
+            <Tool />
           </div>
-        </section>
+        </main>
+      ) : (
+        <main className="workspace-grid">
+          {/* Left Column: Chat & Dialogue */}
+          <section className="dialogue-column" aria-label="Question and Answer Stream">
+            <div className="dialogue-scroll">
+              {messages.length === 0 && (
+                <div className="placeholder-state">
+                  <div className="placeholder-heading">NO ACTIVE DIALOGUE</div>
+                  <p className="placeholder-desc">
+                    Submit a query in Hindi or select one of the verified reference questions below.
+                    Every answer is strictly mapped and citations are pinned to the verified PDF page.
+                  </p>
+                </div>
+              )}
 
-        <aside className="source" aria-label="Source from the textbook">
-          {!cite ? (
-            <div className="empty"><p>The matching textbook page appears here after you ask a question.</p></div>
-          ) : (
-            <div className="sheet">
-              <div className="folio">
-                <span className="folio-label">PDF page</span>
-                <span className="folio-num">{cite.page_number}</span>
-              </div>
-              <p className="crumb">{cite.chapter} › {cite.topic}</p>
-              <blockquote className="snippet"><mark>{cite.snippet}</mark></blockquote>
-              <p className="fine">Page and passage come from the PDF itself, not from the AI model. Match score {cite.score.toFixed(2)}.</p>
-              {cur.citations.length > 1 && (
-                <div className="others">
-                  <p className="others-title">Other passages considered</p>
-                  {cur.citations.map((c, k) => (
-                    <button key={k} className={`other ${k === citeIdx ? "on" : ""}`} onClick={() => setCiteIdx(k)}>
-                      Page {c.page_number} · {c.topic}
+              {messages.map((m, idx) => (
+                <div
+                  key={idx}
+                  className={`dialogue-card ${idx === activeMsgIdx ? "selected" : ""}`}
+                  onClick={() => {
+                    setActiveMsgIdx(idx);
+                    setActiveCiteIdx(0);
+                  }}
+                >
+                  <div className="card-header">
+                    <span className="entry-index">QUERY #{String(idx + 1).padStart(2, "0")}</span>
+                    {m.latency != null && (
+                      <span className="entry-latency">
+                        {(m.latency / 1000).toFixed(1)}S LATENCY &middot; PAGE{" "}
+                        {m.citations[0]?.page_number ?? "-"}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="query-text">{m.question}</h3>
+                  {m.error && <div className="error-box">{m.error}</div>}
+                  <div className="answer-text">
+                    {m.answer}
+                    {m.loading && <span className="cursor-block" />}
+                  </div>
+                </div>
+              ))}
+              <div ref={logBottomRef} />
+            </div>
+
+            {selectedPack?.sample_questions?.length > 0 && (
+              <div className="samples-bar">
+                <span className="samples-label">BENCHMARK QUERIES:</span>
+                <div className="samples-list">
+                  {selectedPack.sample_questions.map((q, idx) => (
+                    <button
+                      key={idx}
+                      className="sample-btn"
+                      disabled={isBusy}
+                      onClick={() => handleAsk(q)}
+                    >
+                      {q}
                     </button>
                   ))}
                 </div>
-              )}
+              </div>
+            )}
+
+            <div className="input-bar">
+              <input
+                className="query-input"
+                value={inputVal}
+                onChange={(e) => setInputVal(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAsk(inputVal)}
+                placeholder="Type question in Hindi..."
+                aria-label="Input Query"
+              />
+              <button
+                className="action-btn submit-btn"
+                disabled={isBusy || !inputVal.trim()}
+                onClick={() => handleAsk(inputVal)}
+              >
+                {isBusy ? "PROCESSING" : "SUBMIT"}
+              </button>
             </div>
-          )}
-        </aside>
-      </main>
-        </>
+          </section>
+
+          {/* Right Column: Source Citation Verification */}
+          <aside className="citation-column" aria-label="Source Document Citation">
+            <div className="column-top-label">
+              <span>DOCUMENT CITATION VERIFICATION</span>
+            </div>
+
+            {!activeCitation ? (
+              <div className="citation-idle">
+                <div className="idle-title">AWAITING QUERY EXECUTION</div>
+                <p className="idle-sub">
+                  When a question is processed, physical page verification and the exact passage
+                  extracted from the text book will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="citation-details">
+                <div className="page-metric-panel">
+                  <div className="page-metric-label">VERIFIED PDF PAGE</div>
+                  <div className="page-metric-number">
+                    {String(activeCitation.page_number).padStart(2, "0")}
+                  </div>
+                </div>
+
+                <div className="meta-row">
+                  <span className="meta-label">SECTION:</span>
+                  <span className="meta-val">
+                    {activeCitation.chapter} &rarr; {activeCitation.topic}
+                  </span>
+                </div>
+
+                <div className="meta-row">
+                  <span className="meta-label">MATCH SCORE:</span>
+                  <span className="meta-val">{(activeCitation.score * 100).toFixed(1)}%</span>
+                </div>
+
+                <div className="passage-card">
+                  <span className="passage-tag">EXTRACTED PASSAGE</span>
+                  <blockquote className="passage-body">{activeCitation.snippet}</blockquote>
+                </div>
+
+                <div className="footnote-alert">
+                  Citations are extracted directly via PyMuPDF coordinate geometry and are locked
+                  against hallucination.
+                </div>
+
+                {activeMessage.citations.length > 1 && (
+                  <div className="alternative-citations">
+                    <span className="alt-title">ALTERNATIVE PASSAGES CONSIDERED:</span>
+                    <div className="alt-list">
+                      {activeMessage.citations.map((c, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          className={`alt-card ${i === activeCiteIdx ? "active" : ""}`}
+                          onClick={() => setActiveCiteIdx(i)}
+                        >
+                          <span className="alt-page">PAGE {c.page_number}</span>
+                          <span className="alt-topic">{c.topic}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
+        </main>
       )}
     </div>
   );

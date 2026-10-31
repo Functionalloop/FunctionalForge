@@ -1,6 +1,7 @@
 """Bhasha Mentor offline API.   Run:  cd backend && uvicorn main:app --port 8000"""
 import config  # noqa: F401  (must be first)
 
+import io
 import json
 import re
 import shutil
@@ -8,7 +9,8 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+import fitz
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -110,15 +112,67 @@ def packs():
             if not d.is_dir():
                 continue
             info, r = _read_info(d), STATE["retrievers"].get(d.name)
+            pdf = _find_pdf(d)
+            total_pages = 0
+            if pdf:
+                try:
+                    doc = fitz.open(str(pdf))
+                    total_pages = len(doc)
+                    doc.close()
+                except Exception:
+                    pass
             out.append({
                 "id": d.name,
                 "title": info.get("title", d.name),
                 "description": info.get("description", ""),
                 "sample_questions": info.get("sample_questions", []),
+                "book_page_offset": info.get("book_page_offset", 314),
                 "indexed": r is not None,
                 "chunks": len(r.chunks) if r else 0,
+                "total_pages": total_pages,
             })
     return out
+
+
+@app.get("/benchmarks")
+def benchmarks():
+    f = config.BASE_DIR / "tkd_questions.json"
+    if f.exists():
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+    return []
+
+
+@app.get("/page-image")
+def page_image(pack_id: str = "tk-d", page_number: int = 1, dpi: int = 150):
+    d = _pack_dir(pack_id)
+    pdf = _find_pdf(d)
+    if not pdf:
+        raise HTTPException(404, "PDF not found.")
+    try:
+        doc = fitz.open(str(pdf))
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            raise HTTPException(400, f"Page number {page_number} out of range (1..{len(doc)}).")
+        page = doc[page_number - 1]
+        rect = page.rect
+        pix = page.get_pixmap(dpi=dpi)
+        img_bytes = pix.tobytes("png")
+        page_width, page_height = rect.width, rect.height
+        doc.close()
+        return Response(
+            content=img_bytes,
+            media_type="image/png",
+            headers={
+                "X-Page-Width": str(page_width),
+                "X-Page-Height": str(page_height),
+                "X-Total-Pages": str(len(doc) if 'doc' in locals() else 0),
+            }
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Rendering page error: {e}")
 
 
 @app.post("/ingest")
@@ -151,15 +205,37 @@ def _retrieve(req: AskRequest):
     return q, r.search(q, top_k=config.TOP_K)
 
 
+def _check_section_warning(topic: str) -> Optional[str]:
+    t = (topic or "").lower()
+    summary_keywords = ["सारांश", "summary", "अभ्यास", "exercise", "विचारणीय", "thought", "प्रश्न", "question"]
+    if any(k in t for k in summary_keywords):
+        return "यह अंश अध्याय के सारांश, विचारणीय विषय या अभ्यास से है और हो सकता है कि संपूर्ण उत्तर का पूर्ण समर्थन न करे।"
+    return None
+
+
 def _citations(chunks):
-    return [{
-        "page_number": c["page_number"],   # straight from parser metadata, never from the LLM
-        "chapter": c["chapter"],
-        "topic": c["topic"],
-        "snippet": c["text"],
-        "score": c["score"],
-        "pdf_filename": c["pdf_filename"],
-    } for c in chunks]
+    out = []
+    for c in chunks:
+        score = float(c.get("score", 0.0))
+        if score >= 0.70:
+            match_level = "strong"
+        elif score >= 0.35:
+            match_level = "weak"
+        else:
+            match_level = "none"
+
+        out.append({
+            "page_number": c["page_number"],
+            "chapter": c["chapter"],
+            "topic": c["topic"],
+            "snippet": c["text"],
+            "score": score,
+            "match_level": match_level,
+            "bbox": c.get("bbox"),
+            "section_warning": _check_section_warning(c.get("topic", "")),
+            "pdf_filename": c["pdf_filename"],
+        })
+    return out
 
 
 @app.post("/ask")
@@ -167,7 +243,7 @@ def ask(req: AskRequest):
     t0 = time.time()
     q, chunks = _retrieve(req)
     if not chunks:
-        return {"answer": "इस पैक में कोई पाठ नहीं मिला।", "citations": [], "latency_ms": 0}
+        return {"answer": "इस पाठ्यपुस्तक में यह जानकारी उपलब्ध नहीं है।", "citations": [], "latency_ms": 0}
     try:
         answer = llm.generate(llm.build_prompt(q, chunks))
     except llm.OllamaUnavailable as e:

@@ -1,9 +1,7 @@
-"""PyMuPDF parser: PDF -> structured chunks (chapter, topic, page_number, text).
+"""PyMuPDF parser: PDF -> structured chunks (chapter, topic, page_number, text, bbox).
 
 Page numbers are the physical PDF page (1-indexed) read straight from PyMuPDF.
 The LLM never sees or produces them.
-
-Quick check on a real PDF:   python pdf_parser.py ../content-packs/tk-d/chapter.pdf
 """
 import json
 import os
@@ -46,22 +44,25 @@ def _block_text_and_size(block):
 
 
 def parse_pdf(pdf_path, chapter_name="अध्याय 1"):
-    """Return (chunks, page_count)."""
+    """Return (chunks, page_count). Each chunk includes bbox coordinates on its page."""
     doc = fitz.open(pdf_path)
     n_pages = len(doc)
     pdf_name = os.path.basename(pdf_path)
     chunks = []
     topic = DEFAULT_TOPIC
 
-    def emit(page_num, topic_name, text):
+    def emit(page_num, topic_name, text, bbox):
         text = text.strip()
         if text:
+            # Round bbox coordinates for clean JSON
+            clean_bbox = [round(v, 2) for v in bbox] if bbox else None
             chunks.append({
                 "chunk_id": f"p{page_num}_c{len(chunks)}",
                 "chapter": chapter_name,
                 "topic": topic_name,
                 "page_number": page_num,
                 "text": text,
+                "bbox": clean_bbox,
                 "pdf_filename": pdf_name,
             })
 
@@ -71,7 +72,8 @@ def parse_pdf(pdf_path, chapter_name="अध्याय 1"):
         page_h = page.rect.height
         blocks = page.get_text("dict", sort=True)["blocks"]
         median = _median_size(blocks)
-        buf, fresh = "", 0   # fresh = characters added since the last emit (excludes overlap)
+        buf, fresh = "", 0
+        current_bbox = None
 
         for b in blocks:
             if "lines" not in b:
@@ -89,20 +91,31 @@ def parse_pdf(pdf_path, chapter_name="अध्याय 1"):
             )
             if is_heading:
                 if fresh >= MIN_FRESH:
-                    emit(page_num, topic, buf)      # text before the heading belongs to the OLD topic
+                    emit(page_num, topic, buf, current_bbox)
                 buf, fresh = "", 0
+                current_bbox = None
                 topic = text
                 continue
 
             buf = f"{buf} {text}".strip()
             fresh += len(text) + 1
+            if current_bbox is None:
+                current_bbox = [x0, y0, x1, y1]
+            else:
+                current_bbox = [
+                    min(current_bbox[0], x0),
+                    min(current_bbox[1], y0),
+                    max(current_bbox[2], x1),
+                    max(current_bbox[3], y1),
+                ]
+
             while len(buf) >= CHUNK_SIZE:
                 cut = buf.rfind(" ", int(CHUNK_SIZE * 0.6), CHUNK_SIZE)
                 if cut == -1:
                     cut = CHUNK_SIZE
-                emit(page_num, topic, buf[:cut])
+                emit(page_num, topic, buf[:cut], current_bbox)
                 tail = buf[max(cut - OVERLAP, 0):]
-                if cut - OVERLAP > 0:            # start the overlap on a word boundary, not mid-word
+                if cut - OVERLAP > 0:
                     sp = tail.find(" ")
                     if 0 <= sp < len(tail) - 1:
                         tail = tail[sp + 1:]
@@ -110,7 +123,7 @@ def parse_pdf(pdf_path, chapter_name="अध्याय 1"):
                 fresh = max(len(buf) - OVERLAP, 0)
 
         if fresh >= MIN_FRESH:
-            emit(page_num, topic, buf)
+            emit(page_num, topic, buf, current_bbox)
 
     doc.close()
     return chunks, n_pages
@@ -143,13 +156,3 @@ if __name__ == "__main__":
     chunks, pages = parse_pdf(sys.argv[1])
     all_text = " ".join(c["text"] for c in chunks)
     print(f"pages={pages}  chunks={len(chunks)}  chars={len(all_text)}")
-    print(f"devanagari ratio={devanagari_ratio(all_text):.2f}  (near 0 on a Hindi book => garbled fonts or scanned PDF)")
-    print("\ntopics found (in order):")
-    seen = []
-    for c in chunks:
-        if c["topic"] not in seen:
-            seen.append(c["topic"])
-            print(f"  p{c['page_number']:>3}  {c['topic']}")
-    print("\nfirst chunks:")
-    for c in chunks[:5]:
-        print(f"--- p{c['page_number']} | {c['topic']}\n{c['text'][:200]}")

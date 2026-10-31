@@ -1,13 +1,13 @@
 {
   "id": "tk-d",
-  "title": "TK-D test kit",
+  "title": "TK-D: ऊष्मागतिकी (Thermodynamics)",
   "description": "Official TK-D data pack (Hindi textbook chapter)",
-  "chapter": "TK-D अध्याय",
+  "chapter": "ऊष्मागतिकी",
   "sample_questions": [
-    "REPLACE: TK-D question 1 (Hindi)",
-    "REPLACE: TK-D question 2 (Hindi)",
-    "REPLACE: TK-D question 3 (Hindi)",
-    "REPLACE: TK-D question 4 (Hindi)",
-    "REPLACE: TK-D question 5 (Hindi)"
+    "ऊष्मागतिकी का शून्य कोटि नियम क्या कहता है और इससे किस भौतिक राशि की अवधारणा विकसित होती है?",
+    "आंतरिक ऊर्जा को ऊष्मागतिकीय 'अवस्था चर' क्यों कहा जाता है?",
+    "ऊष्मागतिकी के प्रथम नियम का गणितीय समीकरण लिखिए और उसमें ΔQ, ΔU तथा ΔW का अर्थ बताइए।",
+    "वायुमंडलीय दाब पर 1 ग्राम जल के वाष्प में बदलने पर उसकी आंतरिक ऊर्जा में कितना परिवर्तन होता है?",
+    "कार्नो इंजन की दक्षता का सूत्र क्या है, और यह किन राशियों पर निर्भर करती है?"
   ]
 }
