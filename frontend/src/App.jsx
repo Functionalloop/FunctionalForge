@@ -4,6 +4,23 @@ import { translations } from "./locales.js";
 
 const API = import.meta.env.DEV ? "http://localhost:8000" : "";
 
+export function cleanHindiText(str) {
+  if (!str) return "";
+  let s = String(str).replace(/\u25CC/g, "");
+  // Join isolated matras with their preceding consonant
+  s = s.replace(/([\u0900-\u097F])\s+([\u093E-\u094F\u0962\u0963])/g, "$1$2");
+  // Fix common broken ligature spaces in extracted physics terms
+  s = s.replace(/गत\s+िकी/g, "गतिकी")
+       .replace(/ऊ\s*ष्मा/g, "ऊष्मा")
+       .replace(/ता\s*पी\s*य/g, "तापीय")
+       .replace(/सा\s*म्य/g, "साम्य")
+       .replace(/शून्य\s*वाँ/g, "शून्यवाँ")
+       .replace(/प्र\s*थम/g, "प्रथम")
+       .replace(/द्वि\s*तीय/g, "द्वितीय")
+       .replace(/इंजन/g, "इंजन");
+  return s.replace(/\s+/g, " ").trim();
+}
+
 export default function App() {
   const [lang, setLang] = useState("en"); // Default language is English ("en" | "hi")
   const t = translations[lang] || translations.en;
@@ -23,6 +40,7 @@ export default function App() {
   // PDF Page viewer state
   const [pageNumber, setPageNumber] = useState(1);
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [viewMode, setViewMode] = useState("scan"); // "scan" | "paper"
   const [pageImageLoading, setPageImageLoading] = useState(false);
   const [pageImageError, setPageImageError] = useState(false);
   const [showRawDebug, setShowRawDebug] = useState(false);
@@ -269,7 +287,7 @@ export default function App() {
     if (!citations.length) return answerText;
     return (
       <div className="answer-paragraph">
-        {answerText}
+        <div className="answer-prose">{answerText}</div>
         <div className="evidence-tags">
           <span className="evidence-title">{t.sourcesTitle}</span>
           {citations.map((c, i) => (
@@ -281,7 +299,7 @@ export default function App() {
                 setActiveCiteIdx(i);
                 setPageNumber(c.page_number);
               }}
-              title={`Page ${c.page_number} (${c.topic})`}
+              title={`Page ${c.page_number} (${cleanHindiText(c.topic)})`}
             >
               [{i + 1}] PDF p.{c.page_number} &middot; Book p.{c.page_number + bookOffset}
             </button>
@@ -293,53 +311,56 @@ export default function App() {
 
   return (
     <div className="layout-root">
-      {/* Top Header */}
+      {/* Top Navigation Bar: Royal Blue Gradient Banner */}
       <header className="header-bar">
         <div className="brand-group">
-          <span className="brand-title">{t.brandTitle}</span>
-          <span className="brand-divider">/</span>
-          <span className="brand-sub">{t.brandSub}</span>
+          <div className="brand-badge-box">📖</div>
+          <div className="brand-text-block">
+            <span className="brand-title">{t.brandTitle}</span>
+            <span className="brand-sub">{t.brandSub}</span>
+          </div>
         </div>
 
-        <nav className="nav-tabs" aria-label="Mode Selection">
+        {/* Segmented Navigation Tabs in semi-transparent navy pill */}
+        <nav className="nav-tabs-pill" aria-label="Mode Selection">
           <button
             type="button"
-            className={`nav-btn ${activeTab === "mentor" ? "active" : ""}`}
+            className={`nav-tab-btn ${activeTab === "mentor" ? "active" : ""}`}
             onClick={() => setActiveTab("mentor")}
           >
             {t.tabQa}
           </button>
           <button
             type="button"
-            className={`nav-btn ${activeTab === "benchmark" ? "active" : ""}`}
+            className={`nav-tab-btn ${activeTab === "benchmark" ? "active" : ""}`}
             onClick={() => setActiveTab("benchmark")}
           >
             {t.tabBench}
           </button>
           <button
             type="button"
-            className={`nav-btn ${activeTab === "pagemark" ? "active" : ""}`}
+            className={`nav-tab-btn ${activeTab === "pagemark" ? "active" : ""}`}
             onClick={() => setActiveTab("pagemark")}
           >
             {t.tabPagemark}
           </button>
         </nav>
 
+        {/* Status, Language, and Pack Controls */}
         <div className="header-meta">
-          {/* Language Selector */}
-          <div className="lang-switcher">
+          {/* Language Toggle Pill */}
+          <div className="lang-switcher-pill">
             <button
               type="button"
-              className={`lang-btn ${lang === "en" ? "active" : ""}`}
+              className={`lang-pill-btn ${lang === "en" ? "active" : ""}`}
               onClick={() => setLang("en")}
-              title="Switch UI to English"
+              title="Switch to English"
             >
               EN
             </button>
-            <span className="lang-sep">|</span>
             <button
               type="button"
-              className={`lang-btn ${lang === "hi" ? "active" : ""}`}
+              className={`lang-pill-btn ${lang === "hi" ? "active" : ""}`}
               onClick={() => setLang("hi")}
               title="हिंदी में बदलें"
             >
@@ -347,9 +368,10 @@ export default function App() {
             </button>
           </div>
 
-          <div className="status-indicator">
-            <span className={`status-signal ${isServerReady ? "live" : "standby"}`} />
-            <span className="status-text">
+          {/* Offline Ready Status Badge */}
+          <div className="status-badge-pill">
+            <span className={`status-dot ${isServerReady ? "live" : "standby"}`} />
+            <span className="status-badge-text">
               {health === null
                 ? t.serverOffline
                 : isServerReady
@@ -358,36 +380,46 @@ export default function App() {
             </span>
           </div>
 
+          {/* Pack Selector & Upload PDF */}
           <div className="doc-controls-group">
             <select
-              className="select-input"
+              className="select-input-styled"
               value={packId}
               onChange={(e) => setPackId(e.target.value)}
               aria-label="Select Content Pack"
             >
               {packs.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.title} ({p.chunks} {t.passages} &middot; {p.total_pages || 20} {t.pages})
+                  {p.title} ({p.chunks} {t.passages} · {p.total_pages || 20} {t.pages})
                 </option>
               ))}
             </select>
-            <label className="action-btn upload-btn">
-              {t.uploadPdf}
+            <label className="upload-pdf-btn">
+              <span>{t.uploadPdf}</span>
               <input type="file" accept="application/pdf" onChange={handleFileUpload} hidden />
             </label>
           </div>
         </div>
       </header>
 
-      {uploadStatus && <div className="system-banner">{uploadStatus}</div>}
+      {/* Sub-header Index Banner: Soft Sky-Blue Info Strip */}
+      <div className="sub-header-strip">
+        <div className="sub-header-content">
+          <span className="sub-header-icon">📚</span>
+          <span className="sub-header-text">
+            <strong>Indexed {selectedPack?.chunks ?? 177} passages</strong> from {totalBookPages} pages &middot; NCERT Class 11 Physics Ch. 12 (ऊष्मागतिकी)
+          </span>
+        </div>
+        {uploadStatus && <span className="upload-notice">{uploadStatus}</span>}
+      </div>
 
       {/* Main Mode View */}
       {activeTab === "pagemark" ? (
         <main className="tool-container">
           <div className="tool-inner">
-            <div className="section-header">
-              <span className="section-tag">{t.localToolTag}</span>
-              <h2 className="section-title">{t.localToolTitle}</h2>
+            <div className="section-header-banner">
+              <span className="section-tag-indigo">{t.localToolTag}</span>
+              <h2 className="section-title-clean">{t.localToolTitle}</h2>
             </div>
             <Tool />
           </div>
@@ -397,14 +429,14 @@ export default function App() {
           <div className="benchmark-inner">
             <div className="bench-header-row">
               <div>
-                <span className="section-tag">{t.evalTag}</span>
-                <h2 className="section-title">{t.evalTitle}</h2>
+                <span className="section-tag-indigo">{t.evalTag}</span>
+                <h2 className="section-title-clean">{t.evalTitle}</h2>
                 <p className="bench-desc">{t.evalDesc}</p>
               </div>
               <div className="bench-actions">
                 <button
                   type="button"
-                  className="action-btn run-all-btn"
+                  className="primary-action-btn run-all-btn"
                   disabled={isRunningAll}
                   onClick={runAllBenchmarks}
                 >
@@ -416,19 +448,19 @@ export default function App() {
             </div>
 
             {benchEvaluated.length > 0 && (
-              <div className="bench-stats-bar">
-                <div className="stat-pill">
-                  <span className="stat-label">{t.accuracyLabel}</span>
-                  <span className="stat-value">{benchCorrect} / {benchEvaluated.length} CORRECT</span>
+              <div className="bench-stats-row">
+                <div className="stat-card emerald">
+                  <span className="stat-card-label">{t.accuracyLabel}</span>
+                  <span className="stat-card-value">{benchCorrect} / {benchEvaluated.length} CORRECT</span>
                 </div>
-                <div className="stat-pill">
-                  <span className="stat-label">{t.avgLatencyLabel}</span>
-                  <span className="stat-value">{benchAvgLatency} SECONDS</span>
+                <div className="stat-card royal">
+                  <span className="stat-card-label">{t.avgLatencyLabel}</span>
+                  <span className="stat-card-value">{benchAvgLatency} SECONDS</span>
                 </div>
               </div>
             )}
 
-            <div className="bench-table">
+            <div className="bench-card-table">
               <div className="bench-thead">
                 <span className="col-q">{t.colQuery}</span>
                 <span className="col-page">{t.colExpPage}</span>
@@ -471,12 +503,13 @@ export default function App() {
         </main>
       ) : (
         <main className="workspace-grid">
-          {/* Left Column: Chat Dialogue */}
+          {/* Left Column: Student Q&A Dialogue & Benchmark Reference Chips */}
           <section className="dialogue-column" aria-label="Questions and Dialogue Stream">
             <div className="dialogue-scroll">
               {messages.length === 0 && (
-                <div className="placeholder-state">
-                  <div className="placeholder-heading">{t.noDialogueTitle}</div>
+                <div className="placeholder-state-card">
+                  <div className="placeholder-icon">💡</div>
+                  <h3 className="placeholder-heading">{t.noDialogueTitle}</h3>
                   <p className="placeholder-desc">{t.noDialogueDesc}</p>
                 </div>
               )}
@@ -486,7 +519,7 @@ export default function App() {
                 return (
                   <div
                     key={idx}
-                    className={`dialogue-card ${idx === activeMsgIdx ? "selected" : ""} ${
+                    className={`qa-card ${idx === activeMsgIdx ? "selected" : ""} ${
                       msgUnavailable ? "unavailable-card" : ""
                     }`}
                     onClick={() => {
@@ -494,30 +527,38 @@ export default function App() {
                       setActiveCiteIdx(0);
                     }}
                   >
-                    <div className="card-header">
-                      <span className="entry-index">{t.queryIndexPrefix} #{String(idx + 1).padStart(2, "0")}</span>
+                    {/* Card Header Strip: Soft Slate/Indigo */}
+                    <div className="qa-card-header">
+                      <span className="query-purple-badge">
+                        {t.queryIndexPrefix} #{String(idx + 1).padStart(2, "0")}
+                      </span>
                       {m.latency != null && (
-                        <span className="entry-latency">
-                          {t.latencyPrefix} {(m.latency / 1000).toFixed(1)}s &middot; PDF p.
-                          {m.citations[0]?.page_number ?? "-"}
-                        </span>
+                        <div className="qa-card-meta-badges">
+                          <span className="latency-blue-badge">
+                            ⏱ {(m.latency / 1000).toFixed(1)}s
+                          </span>
+                          <span className="page-amber-badge">
+                            📄 PDF p.{m.citations[0]?.page_number ?? "-"}
+                          </span>
+                        </div>
                       )}
                     </div>
 
-                    <h3 className="query-text">{m.question}</h3>
+                    {/* Student Question */}
+                    <h3 className="student-question-text">{m.question}</h3>
                     {m.error && <div className="error-box">{m.error}</div>}
 
-                    {/* Failure state */}
+                    {/* Failure state or Grounded Answer */}
                     {msgUnavailable ? (
-                      <div className="unavailable-alert">
+                      <div className="unavailable-alert-box">
                         <div className="alert-head">
-                          <span className="alert-icon">[!]</span>
-                          <span>{t.infoNotInBook}</span>
+                          <span className="alert-icon">⚠️</span>
+                          <span className="alert-title">{t.infoNotInBook}</span>
                         </div>
                         <p className="alert-body">{t.infoNotInBookDesc}</p>
                         <button
                           type="button"
-                          className="ghost-btn-small"
+                          className="closest-passages-btn"
                           onClick={(e) => {
                             e.stopPropagation();
                             setShowFallbacks(true);
@@ -527,9 +568,9 @@ export default function App() {
                         </button>
                       </div>
                     ) : (
-                      <div className="answer-text">
+                      <div className="ai-answer-callout">
                         {renderAnswerWithCitations(m.answer, m.citations)}
-                        {m.loading && <span className="cursor-block" />}
+                        {m.loading && <span className="cursor-pulse-dot" />}
                       </div>
                     )}
                   </div>
@@ -551,15 +592,17 @@ export default function App() {
               <div ref={logBottomRef} />
             </div>
 
-            {/* Benchmark Sample Chips */}
+            {/* Benchmark Reference Queries (Quick-Click Chips) */}
             {selectedPack?.sample_questions?.length > 0 && (
-              <div className="samples-bar">
-                <span className="samples-label">{t.benchmarkQueriesTitle}</span>
-                <div className="samples-list">
+              <div className="benchmark-chips-section">
+                <span className="chips-section-title">
+                  ✨ {t.benchmarkQueriesTitle}
+                </span>
+                <div className="chips-flow-container">
                   {selectedPack.sample_questions.map((q, idx) => (
                     <button
                       key={idx}
-                      className="sample-btn"
+                      className="benchmark-chip-btn"
                       disabled={isBusy}
                       onClick={() => handleAsk(q)}
                     >
@@ -570,11 +613,11 @@ export default function App() {
               </div>
             )}
 
-            {/* Input Composer */}
-            <div className="input-bar">
-              <div className="input-field-wrapper">
+            {/* Bottom Question Input Bar */}
+            <div className="bottom-input-container">
+              <div className="input-field-box">
                 <textarea
-                  className="query-input"
+                  className="query-textarea"
                   rows={2}
                   value={inputVal}
                   onChange={(e) => setInputVal(e.target.value)}
@@ -582,76 +625,88 @@ export default function App() {
                   placeholder={t.inputPlaceholder}
                   aria-label="Input Query"
                 />
-                <div className="input-hints">
+                <div className="input-hints-bar">
                   <span>{t.inputHint}</span>
                 </div>
               </div>
               <button
-                className={`action-btn submit-btn ${inputVal.trim() ? "ready" : "disabled"}`}
+                className={`ask-question-btn ${inputVal.trim() ? "ready" : "disabled"}`}
                 disabled={isBusy || !inputVal.trim()}
                 onClick={() => handleAsk(inputVal)}
               >
-                {isBusy ? t.processingBtn : t.submitBtn}
+                {isBusy ? t.processingBtn : `${t.submitBtn} →`}
               </button>
             </div>
           </section>
 
-          {/* Right Column: PDF Page Viewer & Citation */}
+          {/* Right Column: Verified Textbook Source & Page Inspector */}
           <aside className="citation-column" aria-label="Source Document Citation">
             <div className="column-top-label">
-              <span>{t.retrievedFrom}</span>
+              <span>📖 {t.retrievedFrom}</span>
             </div>
 
             {!activeCitation ? (
-              <div className="citation-idle">
+              <div className="citation-idle-card">
+                <div className="idle-icon">🔍</div>
                 <div className="idle-title">{t.awaitingQueryTitle}</div>
                 <p className="idle-sub">{t.awaitingQueryDesc}</p>
               </div>
             ) : isUnavailable && !showFallbacks ? (
-              <div className="citation-idle">
+              <div className="citation-idle-card">
+                <div className="idle-icon">📑</div>
                 <div className="idle-title">{t.noMatchEvidenceTitle}</div>
                 <p className="idle-sub">{t.noMatchEvidenceDesc}</p>
               </div>
             ) : (
-              <div className="citation-details">
+              <div className="citation-details-wrapper">
                 {activeCitation.section_warning && (
-                  <div className="warning-banner">
-                    <span className="warning-icon">[!]</span>
+                  <div className="section-warning-card">
+                    <span className="warning-icon">⚠️</span>
                     <span>{activeCitation.section_warning}</span>
                   </div>
                 )}
 
-                <div className="citation-meta-header">
-                  <div className="page-pill">
-                    <span className="page-main">PDF p.{pageNumber}</span>
-                    <span className="page-sub">&middot; Book p.{pageNumber + bookOffset}</span>
-                  </div>
-                  <div className="match-badge-group">
-                    <span className={`match-level-badge ${activeCitation.match_level}`}>
-                      {activeCitation.match_level === "strong"
-                        ? t.strongMatch
-                        : activeCitation.match_level === "weak"
-                        ? t.weakMatch
-                        : t.noMatch}
-                    </span>
-                    <span className="score-val">{(activeCitation.score * 100).toFixed(0)}%</span>
+                {/* Top Citation Verification Card with Gradient Accent Stripe */}
+                <div className="verification-header-card">
+                  <div className="verification-top-stripe" />
+                  <div className="verification-content">
+                    <div className="badges-row">
+                      {/* Marigold Page Badge */}
+                      <span className="badge-pill marigold">
+                        PDF p.{pageNumber}
+                      </span>
+                      {/* Royal Blue Book Page Badge */}
+                      <span className="badge-pill royal-blue">
+                        Book p.{pageNumber + bookOffset}
+                      </span>
+                      {/* Emerald Match Badge */}
+                      <span className={`badge-pill ${activeCitation.match_level === "strong" ? "emerald" : "amber"}`}>
+                        {activeCitation.match_level === "strong"
+                          ? t.strongMatch
+                          : activeCitation.match_level === "weak"
+                          ? t.weakMatch
+                          : t.noMatch} &middot; {(activeCitation.score * 100).toFixed(0)}%
+                      </span>
+                    </div>
+
+                    {/* Section Breadcrumb Pill (Fixed garbled Hindi text) */}
+                    <div className="section-breadcrumb-pill">
+                      <span className="breadcrumb-label">{t.sectionLabel}</span>
+                      <span className="breadcrumb-val">
+                        {cleanHindiText(activeCitation.chapter || "ऊष्मागतिकी")} &rarr; {cleanHindiText(activeCitation.topic)}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="meta-row">
-                  <span className="meta-label">{t.sectionLabel}</span>
-                  <span className="meta-val">
-                    {activeCitation.chapter} &rarr; {activeCitation.topic}
-                  </span>
-                </div>
-
-                {/* PDF Page Image Viewer with Overlay */}
+                {/* PDF Page Viewer & Fallback Textbook Paper View */}
                 <div className="pdf-viewer-card">
+                  {/* Viewer Toolbar */}
                   <div className="viewer-toolbar">
                     <div className="page-nav-btns">
                       <button
                         type="button"
-                        className="tool-btn"
+                        className="viewer-nav-btn"
                         disabled={pageNumber <= 1}
                         onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
                       >
@@ -662,7 +717,7 @@ export default function App() {
                       </span>
                       <button
                         type="button"
-                        className="tool-btn"
+                        className="viewer-nav-btn"
                         disabled={pageNumber >= totalBookPages}
                         onClick={() => setPageNumber((p) => Math.min(totalBookPages, p + 1))}
                       >
@@ -670,10 +725,29 @@ export default function App() {
                       </button>
                     </div>
 
+                    {/* View Mode Toggle: Scan vs Textbook Excerpt */}
+                    <div className="view-mode-toggle">
+                      <button
+                        type="button"
+                        className={`view-mode-btn ${viewMode === "scan" && !pageImageError ? "active" : ""}`}
+                        onClick={() => setViewMode("scan")}
+                      >
+                        {t.viewScan}
+                      </button>
+                      <button
+                        type="button"
+                        className={`view-mode-btn ${viewMode === "paper" || pageImageError ? "active" : ""}`}
+                        onClick={() => setViewMode("paper")}
+                      >
+                        {t.viewExcerpt}
+                      </button>
+                    </div>
+
+                    {/* Zoom controls */}
                     <div className="zoom-controls">
                       <button
                         type="button"
-                        className="tool-btn"
+                        className="zoom-btn"
                         onClick={() => setZoomLevel((z) => Math.max(0.8, Number((z - 0.2).toFixed(1))))}
                       >
                         -
@@ -681,14 +755,14 @@ export default function App() {
                       <span className="zoom-label">{Math.round(zoomLevel * 100)}%</span>
                       <button
                         type="button"
-                        className="tool-btn"
+                        className="zoom-btn"
                         onClick={() => setZoomLevel((z) => Math.min(2.0, Number((z + 0.2).toFixed(1))))}
                       >
                         +
                       </button>
                       <button
                         type="button"
-                        className="tool-btn"
+                        className="zoom-btn reset-btn"
                         onClick={() => setZoomLevel(1.0)}
                       >
                         {t.resetZoom}
@@ -696,25 +770,9 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="page-canvas-wrapper" style={{ overflow: "auto" }}>
-                    {pageImageError ? (
-                      <div className="pdf-load-error">
-                        <div className="pdf-load-error-title">Page {pageNumber} Preview Unavailable</div>
-                        <p className="pdf-load-error-desc">
-                          The backend server is either offline or starting up.
-                        </p>
-                        <button
-                          type="button"
-                          className="tool-btn retry-btn"
-                          onClick={() => {
-                            setPageImageError(false);
-                            setPageImageLoading(true);
-                          }}
-                        >
-                          Retry Loading
-                        </button>
-                      </div>
-                    ) : (
+                  {/* Surface: Either Scanned PDF or Warm Cream Textbook Paper */}
+                  {viewMode === "scan" && !pageImageError ? (
+                    <div className="page-canvas-wrapper" style={{ overflow: "auto" }}>
                       <div
                         className="canvas-inner"
                         style={{
@@ -743,6 +801,7 @@ export default function App() {
                           onError={() => {
                             setPageImageLoading(false);
                             setPageImageError(true);
+                            setViewMode("paper");
                           }}
                         />
 
@@ -759,8 +818,35 @@ export default function App() {
                           />
                         )}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    /* Warm Cream Textbook Paper Surface (Paper view or Fallback) */
+                    <div className="textbook-paper-surface">
+                      <div className="textbook-spine-line" />
+                      <div className="textbook-paper-header">
+                        <div className="paper-badge-pill">
+                          📖 {t.textbookExcerptTitle}
+                        </div>
+                        <div className="paper-page-indicator">
+                          PDF p.{pageNumber} &middot; Book p.{pageNumber + bookOffset}
+                        </div>
+                      </div>
+
+                      <div className="textbook-paper-body">
+                        <div className="paper-section-title">
+                          § {cleanHindiText(activeCitation.topic)}
+                        </div>
+                        <div className="paper-passage-content">
+                          {activeCitation.snippet}
+                        </div>
+                      </div>
+
+                      <div className="textbook-paper-footer">
+                        <span>{t.textbookExcerptFooter}</span>
+                        <span>Page {pageNumber + bookOffset}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Collapsible Raw Text Debug */}
@@ -780,26 +866,28 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Alternative Passages */}
+                {/* Alternative Passages Considered */}
                 {activeMessage.citations.length > 1 && (
-                  <div className="alternative-citations">
-                    <span className="alt-title">{t.altPassagesTitle}</span>
-                    <div className="alt-list">
+                  <div className="alternative-citations-section">
+                    <span className="alt-section-title">{t.altPassagesTitle}</span>
+                    <div className="alt-cards-stack">
                       {activeMessage.citations.map((c, i) => (
                         <button
                           key={i}
                           type="button"
-                          className={`alt-card ${i === activeCiteIdx ? "active" : ""}`}
+                          className={`alt-passage-card ${i === activeCiteIdx ? "active" : ""}`}
                           onClick={() => {
                             setActiveCiteIdx(i);
                             setPageNumber(c.page_number);
                           }}
                         >
-                          <span className="alt-page">
-                            p.{c.page_number} (Book p.{c.page_number + bookOffset})
+                          <span className="alt-page-marigold">
+                            p.{c.page_number}
                           </span>
-                          <span className="alt-topic">{c.topic}</span>
-                          <span className={`alt-badge ${c.match_level}`}>{c.match_level.toUpperCase()}</span>
+                          <span className="alt-topic-text">{cleanHindiText(c.topic)}</span>
+                          <span className={`alt-match-emerald ${c.match_level}`}>
+                            {c.match_level.toUpperCase()}
+                          </span>
                         </button>
                       ))}
                     </div>
